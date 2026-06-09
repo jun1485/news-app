@@ -1,15 +1,19 @@
 {
   "expo": {
-    "name": "news-app",
+    "name": "AI 뉴스 다이제스트",
     "slug": "news-app",
     "version": "1.0.0",
+    "description": "관심 분야와 키워드로 오늘의 한국 뉴스를 AI가 종합해 보여주는 앱",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "jj.koreannews"
     },
     "android": {
+      "package": "jj.koreannews",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -20,6 +24,23 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d871f52a-c43f-42c1-a251-25130caa8893"
+      }
+    },
+    "owner": "jun213"
   }
 }

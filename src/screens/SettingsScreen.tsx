@@ -67,7 +67,7 @@ export function SettingsScreen({ interests, onSave }: Props) {
         </PressableScale>
       </View>
 
-      <Text style={styles.footer}>버전 1.0.0</Text>
+      <Text style={styles.footer}>버전 1.0.1</Text>
       <Text style={styles.footer}>
         본 앱은 기사 원문을 저장하지 않고 제목·출처·AI 요약과 원문 링크만 제공합니다.
       </Text>

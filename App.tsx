@@ -11,6 +11,7 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { DetailScreen } from './src/screens/DetailScreen';
 import { TabBar } from './src/components/TabBar';
 import { loadInterests, saveInterests } from './src/storage/interests';
+import { syncDailyReminder } from './src/notifications/dailyNewsReminder';
 import type { DigestItem } from './src/types';
 import { theme } from './src/theme';
 
@@ -25,6 +26,11 @@ export default function App() {
   // 최초 진입 시 저장된 관심사 로드
   useEffect(() => {
     loadInterests().then(setInterests);
+  }, []);
+
+  // 저장된 알림 설정 기준 매일 오전 9시 예약 동기화(앱 시작 1회)
+  useEffect(() => {
+    void syncDailyReminder();
   }, []);
 
   // 관심사 확정 저장 후 상태 반영(온보딩/설정 공통)

@@ -11,7 +11,8 @@ interface DigestState {
   capped: boolean;
   source: DigestSource;
   partial: boolean;
-  lastUpdated: number | null;
+  stale: boolean;
+  generatedAt: string | null;
   busy: boolean;
   noNew: boolean;
   freshCapped: boolean;
@@ -28,7 +29,8 @@ export function useDigests(interests: string[]): DigestState {
   const [capped, setCapped] = useState(false);
   const [source, setSource] = useState<DigestSource>("network");
   const [partial, setPartial] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [stale, setStale] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [noNew, setNoNew] = useState(false);
   const [freshCapped, setFreshCapped] = useState(false);
@@ -46,7 +48,8 @@ export function useDigests(interests: string[]): DigestState {
       setCapped(result.capped);
       setSource(result.source);
       setPartial(result.partial);
-      setLastUpdated(result.source === "network" ? Date.now() : null);
+      setStale(result.stale);
+      setGeneratedAt(result.generatedAt);
     } catch {
       setError(true);
     } finally {
@@ -62,15 +65,20 @@ export function useDigests(interests: string[]): DigestState {
     setFreshFailed(false);
     try {
       const result = await getFreshDigests(key ? key.split(",") : []);
-      if (result.source === "network" && result.items.length > 0) {
+      if (
+        result.source === "network" &&
+        result.items.length > 0 &&
+        !result.stale
+      ) {
         setItems(result.items);
         setCapped(result.capped);
         setSource("network");
         setPartial(result.partial);
-        setLastUpdated(Date.now());
+        setStale(false);
+        setGeneratedAt(result.generatedAt);
       } else if (result.capped) {
         setFreshCapped(true);
-      } else if (result.source === "unavailable") {
+      } else if (result.source === "unavailable" || result.stale) {
         setFreshFailed(true);
       } else {
         setNoNew(true);
@@ -93,7 +101,8 @@ export function useDigests(interests: string[]): DigestState {
     capped,
     source,
     partial,
-    lastUpdated,
+    stale,
+    generatedAt,
     busy,
     noNew,
     freshCapped,

@@ -7,13 +7,21 @@ import { SAMPLE_DIGESTS } from "./sampleDigests";
 import { GENERATED_DIGESTS } from "./generatedDigests";
 
 const PRESETS: readonly string[] = PRESET_CATEGORIES;
-const CACHE_PREFIX = "digest_cache_v1:";
+const CACHE_PREFIX = "digest_cache_v2:";
 
 // Worker 응답 형태
 interface DigestResponse {
   items: DigestItem[];
   cached: boolean;
+  generatedAt: string;
   capped?: boolean;
+  stale?: boolean;
+}
+
+// 오프라인 캐시 단위
+interface DigestCacheEntry {
+  items: DigestItem[];
+  generatedAt: string | null;
 }
 
 export type DigestSource =
@@ -29,6 +37,8 @@ export interface DigestFetchResult {
   source: DigestSource;
   capped: boolean;
   partial: boolean;
+  stale: boolean;
+  generatedAt: string | null;
 }
 
 // 다른 뉴스 조회 결과 제공
@@ -36,17 +46,35 @@ export async function getFreshDigests(
   interests: string[],
 ): Promise<DigestFetchResult> {
   if (interests.length === 0)
-    return { items: [], source: "empty", capped: false, partial: false };
+    return {
+      items: [],
+      source: "empty",
+      capped: false,
+      partial: false,
+      stale: false,
+      generatedAt: null,
+    };
   if (!WORKER_URL)
-    return { items: [], source: "unavailable", capped: false, partial: false };
+    return {
+      items: [],
+      source: "unavailable",
+      capped: false,
+      partial: false,
+      stale: false,
+      generatedAt: null,
+    };
   const deviceId = await getDeviceId().catch(() => "anon");
   let anyCapped = false;
   let anyFailed = false;
+  let anyStale = false;
+  const generatedAtList: string[] = [];
   const perInterest = await Promise.all(
     interests.map(async (interest) => {
       try {
         const res = await fetchInterest(interest, deviceId, true);
         if (res.capped) anyCapped = true;
+        if (res.stale) anyStale = true;
+        generatedAtList.push(res.generatedAt);
         return res.items;
       } catch {
         anyFailed = true;
@@ -56,15 +84,31 @@ export async function getFreshDigests(
   );
   const items = dedupe(perInterest.flat());
   if (items.length > 0)
-    return { items, source: "network", capped: anyCapped, partial: anyFailed };
+    return {
+      items,
+      source: "network",
+      capped: anyCapped,
+      partial: anyFailed,
+      stale: anyStale,
+      generatedAt: generatedAtList.sort()[0] ?? null,
+    };
   if (anyFailed || anyCapped)
     return {
       items: [],
       source: "unavailable",
       capped: anyCapped,
       partial: false,
+      stale: false,
+      generatedAt: null,
     };
-  return { items: [], source: "empty", capped: false, partial: false };
+  return {
+    items: [],
+    source: "empty",
+    capped: false,
+    partial: false,
+    stale: false,
+    generatedAt: null,
+  };
 }
 
 // 관심사별 다이제스트 조회 결과 제공
@@ -72,7 +116,14 @@ export async function getDigests(
   interests: string[],
 ): Promise<DigestFetchResult> {
   if (interests.length === 0)
-    return { items: [], source: "empty", capped: false, partial: false };
+    return {
+      items: [],
+      source: "empty",
+      capped: false,
+      partial: false,
+      stale: false,
+      generatedAt: null,
+    };
 
   if (!WORKER_URL)
     return {
@@ -80,20 +131,26 @@ export async function getDigests(
       source: "static",
       capped: false,
       partial: false,
+      stale: false,
+      generatedAt: null,
     };
 
   const deviceId = await getDeviceId().catch(() => "anon");
   let anyNetwork = false;
   let anyCapped = false;
   let anyFailed = false;
+  let anyStale = false;
+  const generatedAtList: string[] = [];
 
   const perInterest = await Promise.all(
     interests.map(async (interest) => {
       try {
         const res = await fetchInterest(interest, deviceId);
         if (res.capped) anyCapped = true;
+        if (res.stale) anyStale = true;
         if (res.items.length > 0) {
           anyNetwork = true;
+          generatedAtList.push(res.generatedAt);
           return res.items;
         }
         return [];
@@ -106,17 +163,27 @@ export async function getDigests(
 
   const items = dedupe(perInterest.flat());
   if (anyNetwork) {
-    await saveCache(interests, items);
-    return { items, source: "network", capped: anyCapped, partial: anyFailed };
+    const generatedAt = generatedAtList.sort()[0] ?? null;
+    await saveCache(interests, items, generatedAt);
+    return {
+      items,
+      source: "network",
+      capped: anyCapped,
+      partial: anyFailed,
+      stale: anyStale,
+      generatedAt,
+    };
   }
 
   const cached = await loadCache(interests);
-  if (cached && cached.length > 0)
+  if (cached && cached.items.length > 0)
     return {
-      items: cached,
+      items: cached.items,
       source: "cache",
       capped: anyCapped,
       partial: false,
+      stale: true,
+      generatedAt: cached.generatedAt,
     };
   if (anyFailed || anyCapped)
     return {
@@ -124,8 +191,17 @@ export async function getDigests(
       source: "unavailable",
       capped: anyCapped,
       partial: false,
+      stale: false,
+      generatedAt: null,
     };
-  return { items: [], source: "empty", capped: false, partial: false };
+  return {
+    items: [],
+    source: "empty",
+    capped: false,
+    partial: false,
+    stale: false,
+    generatedAt: null,
+  };
 }
 
 // 관심사 1건 다이제스트 조회
@@ -174,21 +250,29 @@ function cacheKey(interests: string[]): string {
 async function saveCache(
   interests: string[],
   items: DigestItem[],
+  generatedAt: string | null,
 ): Promise<void> {
   try {
-    await AsyncStorage.setItem(cacheKey(interests), JSON.stringify(items));
+    await AsyncStorage.setItem(
+      cacheKey(interests),
+      JSON.stringify({ items, generatedAt }),
+    );
   } catch {
     // 캐시 저장 실패는 무시
   }
 }
 
 // 캐시된 조회 결과 로드
-async function loadCache(interests: string[]): Promise<DigestItem[] | null> {
+async function loadCache(
+  interests: string[],
+): Promise<DigestCacheEntry | null> {
   try {
     const raw = await AsyncStorage.getItem(cacheKey(interests));
     if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as DigestItem[]) : null;
+    const parsed = JSON.parse(raw) as Partial<DigestCacheEntry>;
+    return Array.isArray(parsed.items)
+      ? { items: parsed.items, generatedAt: parsed.generatedAt ?? null }
+      : null;
   } catch {
     return null;
   }

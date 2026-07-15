@@ -21,7 +21,8 @@ export function FeedScreen({ interests, onSelect }: Props) {
     capped,
     source,
     partial,
-    lastUpdated,
+    stale,
+    generatedAt,
     busy,
     noNew,
     freshCapped,
@@ -31,13 +32,24 @@ export function FeedScreen({ interests, onSelect }: Props) {
   } = useDigests(interests);
   const insets = useSafeAreaInsets();
 
-  // 마지막 갱신 시각 표시
-  const updatedLabel = lastUpdated
-    ? new Date(lastUpdated).toLocaleTimeString("ko-KR", {
+  // 뉴스 생성 시각 표시
+  const generatedLabel = generatedAt
+    ? new Date(generatedAt).toLocaleString("ko-KR", {
+        timeZone: "Asia/Seoul",
+        month: "long",
+        day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       })
     : null;
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const latestPublishedDate = items.reduce(
+    (latest, item) =>
+      item.publishedAt && item.publishedAt > latest ? item.publishedAt : latest,
+    "",
+  );
 
   return (
     <FlatList
@@ -58,8 +70,14 @@ export function FeedScreen({ interests, onSelect }: Props) {
           <Text style={styles.disclaimer}>
             AI가 종합한 요약입니다. 정확한 내용은 원문을 확인하세요.
           </Text>
-          {updatedLabel && (
-            <Text style={styles.meta}>마지막 갱신 {updatedLabel}</Text>
+          {generatedLabel && (
+            <Text style={styles.meta}>뉴스 생성 기준 {generatedLabel}</Text>
+          )}
+          {latestPublishedDate && latestPublishedDate < today && (
+            <Text style={styles.meta}>
+              오늘 새 뉴스가 없어 {latestPublishedDate.replaceAll("-", ".")}{" "}
+              기준 뉴스를 표시합니다.
+            </Text>
           )}
           {source === "static" && (
             <Text style={styles.notice}>
@@ -97,6 +115,11 @@ export function FeedScreen({ interests, onSelect }: Props) {
           {source === "network" && partial && (
             <Text style={styles.notice}>
               일부 관심사의 최신 뉴스를 불러오지 못했습니다.
+            </Text>
+          )}
+          {source === "network" && stale && (
+            <Text style={styles.notice}>
+              최신 뉴스 생성에 실패해 이전 성공 데이터를 표시 중입니다.
             </Text>
           )}
           {capped && (

@@ -9,3 +9,9 @@ export const PRIVACY_URL = 'https://news-worker.wnwjdwns1.workers.dev/privacy';
 
 // 크레딧(다른 뉴스 새로고침 차감) 활성화 — 정식 출시 시 true로 전환, 테스트는 무료
 export const CREDITS_ENABLED = false;
+
+// 스토어 앱 페이지 URL
+export const STORE_URL = 'https://play.google.com/store/apps/details?id=jj.koreannews';
+
+// 배포 버전 정보 공개 URL
+export const APP_VERSION_URL = 'https://jun213-news-app.expo.app/app-version.json';

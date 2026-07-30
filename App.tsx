@@ -10,7 +10,9 @@ import { FeedScreen } from './src/screens/FeedScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { DetailScreen } from './src/screens/DetailScreen';
 import { TabBar } from './src/components/TabBar';
+import { UpdateNotice } from './src/components/UpdateNotice';
 import { loadInterests, saveInterests } from './src/storage/interests';
+import { useAppUpdate } from './src/hooks/useAppUpdate';
 import { syncDailyReminder } from './src/notifications/dailyNewsReminder';
 import type { DigestItem } from './src/types';
 import { theme } from './src/theme';
@@ -22,6 +24,7 @@ export default function App() {
   const [interests, setInterests] = useState<string[] | null>(null); // null=로딩중
   const [tab, setTab] = useState<Tab>('feed');
   const [selected, setSelected] = useState<DigestItem | null>(null); // 상세 오버레이 대상
+  const update = useAppUpdate();
 
   // 최초 진입 시 저장된 관심사 로드
   useEffect(() => {
@@ -39,6 +42,9 @@ export default function App() {
     setInterests(list);
     setTab('feed');
   }, []);
+
+  // 상세 닫기 — 상세 화면 뒤로가기 구독 재등록 방지용 고정 참조
+  const closeDetail = useCallback(() => setSelected(null), []);
 
   // 안드로이드 하드웨어 뒤로가기 — 설정→피드(상세는 DetailScreen이 자체 처리)
   useEffect(() => {
@@ -91,12 +97,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
-        <View style={styles.body} importantForAccessibility={selected ? 'no-hide-descendants' : 'auto'}>
+        <View
+          style={styles.body}
+          importantForAccessibility={selected || update.info ? 'no-hide-descendants' : 'auto'}
+        >
           <ScreenFade screenKey={baseKey} enterFrom={enterFrom}>
             {base}
           </ScreenFade>
         </View>
-        {selected && <DetailScreen item={selected} onBack={() => setSelected(null)} />}
+        {selected && <DetailScreen item={selected} onBack={closeDetail} />}
+        {update.info && <UpdateNotice info={update.info} onClose={update.close} onSkip={update.skip} />}
       </View>
       <StatusBar style="auto" />
     </SafeAreaProvider>

@@ -1,0 +1,27 @@
+name: 아침 뉴스 갱신
+
+# 한국 시간 오전 8시에 카테고리별 뉴스 재생성 요청
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 카테고리별 갱신 요청
+        env:
+          WORKER_URL: https://news-worker.wnwjdwns1.workers.dev
+        run: |
+          fail=0
+          for category in 정치 경제 IT/과학 사회 세계 문화/연예 스포츠; do
+            code=$(curl -s -o /tmp/out.json -w '%{http_code}' --max-time 120 \
+              -G --data-urlencode "category=$category" --data-urlencode "fresh=1" \
+              -H 'x-device-id: gh-actions-morning-refresh' \
+              "$WORKER_URL/digest")
+            count=$(grep -o '"headline"' /tmp/out.json | wc -l)
+            echo "$category → HTTP $code, 기사 $count건"
+            if [ "$code" != "200" ] || [ "$count" -eq 0 ]; then fail=1; fi
+          done
+          exit $fail

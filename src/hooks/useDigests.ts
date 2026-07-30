@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { DigestItem } from "../types";
 import { getDigests, getFreshDigests } from "../data/digestSource";
 import type { DigestSource } from "../data/digestSource";
+import { onlyRecentlyPublished } from "../util/newsDate";
 
 // 다이제스트 화면 상태
 interface DigestState {
@@ -13,6 +14,7 @@ interface DigestState {
   partial: boolean;
   stale: boolean;
   generatedAt: string | null;
+  outdatedHidden: boolean;
   busy: boolean;
   noNew: boolean;
   freshCapped: boolean;
@@ -31,6 +33,7 @@ export function useDigests(interests: string[]): DigestState {
   const [partial, setPartial] = useState(false);
   const [stale, setStale] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [outdatedHidden, setOutdatedHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const [noNew, setNoNew] = useState(false);
   const [freshCapped, setFreshCapped] = useState(false);
@@ -44,7 +47,13 @@ export function useDigests(interests: string[]): DigestState {
     setError(false);
     try {
       const result = await getDigests(key ? key.split(",") : []);
-      setItems(result.items);
+      // 캐시·예시 데이터는 대체 표시분이라 기간 제한 없이 노출
+      const shownItems =
+        result.source === "network"
+          ? onlyRecentlyPublished(result.items)
+          : result.items;
+      setItems(shownItems);
+      setOutdatedHidden(shownItems.length < result.items.length);
       setCapped(result.capped);
       setSource(result.source);
       setPartial(result.partial);
@@ -65,12 +74,10 @@ export function useDigests(interests: string[]): DigestState {
     setFreshFailed(false);
     try {
       const result = await getFreshDigests(key ? key.split(",") : []);
-      if (
-        result.source === "network" &&
-        result.items.length > 0 &&
-        !result.stale
-      ) {
-        setItems(result.items);
+      const recentItems = onlyRecentlyPublished(result.items);
+      if (result.source === "network" && recentItems.length > 0 && !result.stale) {
+        setItems(recentItems);
+        setOutdatedHidden(recentItems.length < result.items.length);
         setCapped(result.capped);
         setSource("network");
         setPartial(result.partial);
@@ -103,6 +110,7 @@ export function useDigests(interests: string[]): DigestState {
     partial,
     stale,
     generatedAt,
+    outdatedHidden,
     busy,
     noNew,
     freshCapped,

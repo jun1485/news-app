@@ -1,4 +1,12 @@
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { useCallback } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LoadingMascot } from "../components/LoadingMascot";
 import { PressableScale } from "../components/PressableScale";
@@ -23,6 +31,7 @@ export function FeedScreen({ interests, onSelect }: Props) {
     partial,
     stale,
     generatedAt,
+    outdatedHidden,
     busy,
     noNew,
     freshCapped,
@@ -42,22 +51,21 @@ export function FeedScreen({ interests, onSelect }: Props) {
         minute: "2-digit",
       })
     : null;
-  const today = new Date(Date.now() + 9 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-  const latestPublishedDate = items.reduce(
-    (latest, item) =>
-      item.publishedAt && item.publishedAt > latest ? item.publishedAt : latest,
-    "",
+  const refreshing = loading && items.length > 0;
+
+  // 카드 렌더러 — 상세 복귀 시 행 재렌더 방지용 고정 참조
+  const renderItem = useCallback(
+    ({ item, index }: ListRenderItemInfo<DigestItem>) => (
+      <NewsCard item={item} index={index} onPress={onSelect} />
+    ),
+    [onSelect],
   );
 
   return (
     <FlatList
       data={items}
       keyExtractor={(item) => item.id}
-      renderItem={({ item, index }) => (
-        <NewsCard item={item} index={index} onPress={onSelect} />
-      )}
+      renderItem={renderItem}
       refreshing={loading}
       onRefresh={reload}
       contentContainerStyle={[
@@ -73,64 +81,75 @@ export function FeedScreen({ interests, onSelect }: Props) {
           {generatedLabel && (
             <Text style={styles.meta}>뉴스 생성 기준 {generatedLabel}</Text>
           )}
-          {latestPublishedDate && latestPublishedDate < today && (
-            <Text style={styles.meta}>
-              오늘 새 뉴스가 없어 {latestPublishedDate.replaceAll("-", ".")}{" "}
-              기준 뉴스를 표시합니다.
-            </Text>
+          {outdatedHidden && items.length > 0 && (
+            <Text style={styles.meta}>최근 이틀 내 게시된 뉴스만 표시합니다.</Text>
           )}
-          {source === "static" && (
-            <Text style={styles.notice}>
-              실시간 서비스 설정이 없어 예시 데이터를 표시 중입니다.
-            </Text>
-          )}
-          {source === "cache" && (
+          {/* 재조회 중 안내 문구 대신 진행 상태 표시 */}
+          {refreshing ? (
+            <View
+              style={styles.progressRow}
+              accessibilityLiveRegion="polite"
+              accessibilityRole="progressbar"
+              accessibilityLabel="최신 뉴스 불러오는 중"
+            >
+              <ActivityIndicator size="small" color={theme.color.primary} />
+              <Text style={styles.meta}>최신 뉴스를 불러오는 중...</Text>
+            </View>
+          ) : (
             <>
-              <Text style={styles.notice}>
-                최신 뉴스를 불러오지 못해 이전 뉴스를 표시 중입니다.
-              </Text>
-              <PressableScale
-                onPress={reload}
-                disabled={loading}
-                accessibilityRole="button"
-                accessibilityLabel="최신 뉴스 다시 불러오기"
-                style={styles.headerRetryBtn}
-              >
-                <Text style={styles.headerRetryText}>
-                  최신 뉴스 다시 불러오기
+              {source === "static" && (
+                <Text style={styles.notice}>
+                  실시간 서비스 설정이 없어 예시 데이터를 표시 중입니다.
                 </Text>
-              </PressableScale>
+              )}
+              {source === "cache" && (
+                <>
+                  <Text style={styles.notice}>
+                    최신 뉴스를 불러오지 못해 이전 뉴스를 표시 중입니다.
+                  </Text>
+                  <PressableScale
+                    onPress={reload}
+                    accessibilityRole="button"
+                    accessibilityLabel="최신 뉴스 다시 불러오기"
+                    style={styles.headerRetryBtn}
+                  >
+                    <Text style={styles.headerRetryText}>
+                      최신 뉴스 다시 불러오기
+                    </Text>
+                  </PressableScale>
+                </>
+              )}
+              {source === "unavailable" && (
+                <Text style={styles.notice}>
+                  최신 뉴스를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+                </Text>
+              )}
+              {source === "empty" && (
+                <Text style={styles.meta}>
+                  선택한 관심사에 해당하는 최신 뉴스를 찾지 못했습니다.
+                </Text>
+              )}
+              {source === "network" && partial && (
+                <Text style={styles.notice}>
+                  일부 관심사의 최신 뉴스를 불러오지 못했습니다.
+                </Text>
+              )}
+              {source === "network" && stale && (
+                <Text style={styles.notice}>
+                  최신 뉴스 생성에 실패해 이전 성공 데이터를 표시 중입니다.
+                </Text>
+              )}
+              {capped && (
+                <Text style={styles.notice}>
+                  일일 생성 한도에 도달해 일부는 캐시 결과만 표시됩니다.
+                </Text>
+              )}
+              {error && (
+                <Text style={styles.notice}>
+                  불러오기에 실패했어요. 당겨서 새로고침 해주세요.
+                </Text>
+              )}
             </>
-          )}
-          {source === "unavailable" && (
-            <Text style={styles.notice}>
-              최신 뉴스를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
-            </Text>
-          )}
-          {source === "empty" && (
-            <Text style={styles.meta}>
-              선택한 관심사에 해당하는 최신 뉴스를 찾지 못했습니다.
-            </Text>
-          )}
-          {source === "network" && partial && (
-            <Text style={styles.notice}>
-              일부 관심사의 최신 뉴스를 불러오지 못했습니다.
-            </Text>
-          )}
-          {source === "network" && stale && (
-            <Text style={styles.notice}>
-              최신 뉴스 생성에 실패해 이전 성공 데이터를 표시 중입니다.
-            </Text>
-          )}
-          {capped && (
-            <Text style={styles.notice}>
-              일일 생성 한도에 도달해 일부는 캐시 결과만 표시됩니다.
-            </Text>
-          )}
-          {error && (
-            <Text style={styles.notice}>
-              불러오기에 실패했어요. 당겨서 새로고침 해주세요.
-            </Text>
           )}
         </View>
       }
@@ -140,9 +159,11 @@ export function FeedScreen({ interests, onSelect }: Props) {
         ) : (
           <View style={styles.emptyBox}>
             <Text style={styles.empty}>
-              {source === "empty"
-                ? "조건에 맞는 최신 뉴스가 없습니다."
-                : "최신 뉴스를 불러올 수 없습니다."}
+              {outdatedHidden
+                ? "최근 게시된 뉴스가 아직 없습니다."
+                : source === "empty"
+                  ? "조건에 맞는 최신 뉴스가 없습니다."
+                  : "최신 뉴스를 불러올 수 없습니다."}
             </Text>
             <PressableScale
               onPress={reload}
@@ -176,11 +197,20 @@ export function FeedScreen({ interests, onSelect }: Props) {
               disabled={busy}
               accessibilityRole="button"
               accessibilityLabel="다른 뉴스 보기"
+              accessibilityState={{ busy, disabled: busy }}
               style={[styles.moreBtn, busy && styles.moreBtnDisabled]}
             >
-              <Text style={styles.moreText}>
-                {busy ? "다른 뉴스 찾는 중..." : "🔄 다른 뉴스 보기"}
-              </Text>
+              {busy ? (
+                <View style={styles.progressRow}>
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.color.chipOffText}
+                  />
+                  <Text style={styles.moreText}>다른 뉴스 찾는 중...</Text>
+                </View>
+              ) : (
+                <Text style={styles.moreText}>🔄 다른 뉴스 보기</Text>
+              )}
             </PressableScale>
           </View>
         ) : null
@@ -196,6 +226,11 @@ const styles = StyleSheet.create({
   disclaimer: { fontSize: 12, color: theme.color.sub },
   meta: { fontSize: 12, color: theme.color.sub },
   notice: { fontSize: 12, color: theme.color.warn },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.sm,
+  },
   headerRetryBtn: {
     alignSelf: "flex-start",
     backgroundColor: theme.color.chipOff,

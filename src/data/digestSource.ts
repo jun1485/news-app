@@ -5,6 +5,7 @@ import { getDeviceId } from "../storage/deviceId";
 import { PRESET_CATEGORIES } from "./interests";
 import { SAMPLE_DIGESTS } from "./sampleDigests";
 import { GENERATED_DIGESTS } from "./generatedDigests";
+import { isValidArticleUrl } from "../util/urlCheck";
 
 const PRESETS: readonly string[] = PRESET_CATEGORIES;
 const CACHE_PREFIX = "digest_cache_v2:";
@@ -216,7 +217,13 @@ async function fetchInterest(
   const url = `${WORKER_URL}/digest?${param}${fresh ? "&fresh=1" : ""}`;
   const res = await fetch(url, { headers: { "x-device-id": deviceId } });
   if (!res.ok) throw new Error(`digest fetch failed: ${res.status}`);
-  return (await res.json()) as DigestResponse;
+  const data = (await res.json()) as DigestResponse;
+  return { ...data, items: withValidLinks(data.items) };
+}
+
+// 원문 링크 형식이 유효한 항목만 통과 — 잘못된 주소 카드 노출 차단
+function withValidLinks(items: DigestItem[]): DigestItem[] {
+  return items.filter((item) => isValidArticleUrl(item.sourceUrl));
 }
 
 // 매체명과 헤드라인 기준 중복 제거
@@ -232,13 +239,15 @@ function dedupe(items: DigestItem[]): DigestItem[] {
 function filterStatic(interests: string[]): DigestItem[] {
   const source =
     GENERATED_DIGESTS.length > 0 ? GENERATED_DIGESTS : SAMPLE_DIGESTS;
-  return source.filter((item) => {
-    const haystack =
-      `${item.category} ${item.headline} ${item.summary}`.toLowerCase();
-    return interests.some(
-      (i) => item.category === i || haystack.includes(i.toLowerCase()),
-    );
-  });
+  return withValidLinks(
+    source.filter((item) => {
+      const haystack =
+        `${item.category} ${item.headline} ${item.summary}`.toLowerCase();
+      return interests.some(
+        (i) => item.category === i || haystack.includes(i.toLowerCase()),
+      );
+    }),
+  );
 }
 
 // 관심사 집합 캐시 키
@@ -271,7 +280,7 @@ async function loadCache(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<DigestCacheEntry>;
     return Array.isArray(parsed.items)
-      ? { items: parsed.items, generatedAt: parsed.generatedAt ?? null }
+      ? { items: withValidLinks(parsed.items), generatedAt: parsed.generatedAt ?? null }
       : null;
   } catch {
     return null;

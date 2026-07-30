@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text } from 'react-native';
 import type { DigestItem } from '../types';
 import { PressableScale } from './PressableScale';
@@ -15,7 +15,7 @@ interface Props {
 const animatedIds = new Set<string>();
 
 // 뉴스 1건 카드 — 최초 1회만 인덱스 순서대로 떠오르는 등장 + 출처표기(정책 충족)
-export function NewsCard({ item, index, onPress }: Props) {
+function NewsCardBase({ item, index, onPress }: Props) {
   const reduce = useReduceMotion();
   const seen = animatedIds.has(item.id);
   const enter = useRef(new Animated.Value(reduce || seen ? 1 : 0)).current;
@@ -38,12 +38,13 @@ export function NewsCard({ item, index, onPress }: Props) {
 
   const translateY = enter.interpolate({ inputRange: [0, 1], outputRange: [18, 0] });
   const scale = enter.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] });
+  const select = useCallback(() => onPress(item), [onPress, item]);
 
   return (
     <Animated.View style={[styles.wrap, { opacity: enter, transform: [{ translateY }, { scale }] }]}>
       <PressableScale
         style={styles.card}
-        onPress={() => onPress(item)}
+        onPress={select}
         accessibilityRole="button"
         accessibilityLabel={`${item.category} 뉴스, ${item.headline}`}
       >
@@ -60,6 +61,9 @@ export function NewsCard({ item, index, onPress }: Props) {
     </Animated.View>
   );
 }
+
+// 상세 진입·복귀 시 목록 재렌더 비용 차단
+export const NewsCard = memo(NewsCardBase);
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: theme.space.sm },

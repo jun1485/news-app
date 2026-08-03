@@ -82,7 +82,7 @@ export function FeedScreen({ interests, onSelect }: Props) {
             <Text style={styles.meta}>뉴스 생성 기준 {generatedLabel}</Text>
           )}
           {outdatedHidden && items.length > 0 && (
-            <Text style={styles.meta}>최근 이틀 내 게시된 뉴스만 표시합니다.</Text>
+            <Text style={styles.meta}>오늘 게시된 뉴스만 표시합니다.</Text>
           )}
           {/* 재조회 중 안내 문구 대신 진행 상태 표시 */}
           {refreshing ? (
@@ -160,7 +160,7 @@ export function FeedScreen({ interests, onSelect }: Props) {
           <View style={styles.emptyBox}>
             <Text style={styles.empty}>
               {outdatedHidden
-                ? "최근 게시된 뉴스가 아직 없습니다."
+                ? "오늘 게시된 뉴스가 아직 없습니다."
                 : source === "empty"
                   ? "조건에 맞는 최신 뉴스가 없습니다."
                   : "최신 뉴스를 불러올 수 없습니다."}

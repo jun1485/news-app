@@ -3,7 +3,7 @@ import type { DigestItem } from '../types';
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 목록 노출 대상 기간(오늘 포함 일수)
-const RECENT_DAYS = 2;
+const RECENT_DAYS = 1;
 
 // 한국 기준 날짜 추출
 function kstDate(offsetMs = 0): string {

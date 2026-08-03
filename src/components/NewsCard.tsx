@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import type { DigestItem } from '../types';
 import { PressableScale } from './PressableScale';
 import { useReduceMotion } from '../hooks/useReduceMotion';
@@ -48,15 +48,18 @@ function NewsCardBase({ item, index, onPress }: Props) {
         accessibilityRole="button"
         accessibilityLabel={`${item.category} 뉴스, ${item.headline}`}
       >
-        <Text style={styles.cat}>{item.category}</Text>
+        <View style={styles.catBadge}>
+          <Text style={styles.catText}>{item.category}</Text>
+        </View>
         <Text style={styles.headline}>{item.headline}</Text>
-        <Text style={styles.summary} numberOfLines={2}>
+        <Text style={styles.summary} numberOfLines={3}>
           {item.summary}
         </Text>
-        <Text style={styles.meta}>
-          {item.sourceName}
-          {item.publishedAt ? ` · ${item.publishedAt}` : ''}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.source}>{item.sourceName}</Text>
+          {item.publishedAt ? <Text style={styles.metaDot}>·</Text> : null}
+          {item.publishedAt ? <Text style={styles.date}>{item.publishedAt}</Text> : null}
+        </View>
       </PressableScale>
     </Animated.View>
   );
@@ -66,17 +69,26 @@ function NewsCardBase({ item, index, onPress }: Props) {
 export const NewsCard = memo(NewsCardBase);
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: theme.space.sm },
+  wrap: { marginBottom: theme.space.md },
   card: {
     backgroundColor: theme.color.surface,
     borderRadius: theme.radius.md,
     padding: theme.space.md,
     borderWidth: 1,
     borderColor: theme.color.border,
-    gap: theme.space.xs,
   },
-  cat: { color: theme.color.primary, fontSize: 12, fontWeight: '700' },
-  headline: { color: theme.color.text, fontSize: 16, fontWeight: '700' },
-  summary: { color: theme.color.sub, fontSize: 14, lineHeight: 20 },
-  meta: { color: theme.color.sub, fontSize: 12, marginTop: theme.space.xs },
+  catBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: theme.color.chipOff,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+    borderRadius: theme.radius.lg,
+  },
+  catText: { color: theme.color.primary, fontSize: 11, fontWeight: '700' },
+  headline: { color: theme.color.text, fontSize: 17, lineHeight: 25, fontWeight: '700', marginTop: theme.space.sm },
+  summary: { color: theme.color.sub, fontSize: 14, lineHeight: 22, marginTop: theme.space.xs },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: theme.space.sm },
+  source: { color: theme.color.text, fontSize: 12, fontWeight: '600' },
+  metaDot: { color: theme.color.border, fontSize: 12 },
+  date: { color: theme.color.sub, fontSize: 12 },
 });

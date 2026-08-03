@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, BackHandler, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, BackHandler, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale } from '../components/PressableScale';
 import { useReduceMotion } from '../hooks/useReduceMotion';
@@ -79,24 +79,33 @@ export function DetailScreen({ item, onBack }: Props) {
   return (
     <Animated.View accessibilityViewIsModal style={[styles.root, { transform: [{ translateX }] }]}>
       {/* 뒤로 버튼 — 슬라이드 아웃 전 즉시 눌림 피드백 제공 */}
-      <PressableScale
-        style={[styles.back, { paddingTop: insets.top + theme.space.sm }]}
-        onPress={close}
-        accessibilityRole="button"
-        accessibilityLabel="뒤로 가기"
-        hitSlop={8}
-      >
-        <Text style={styles.backText}>‹ 뒤로</Text>
-      </PressableScale>
+      <View style={[styles.backRow, { paddingTop: insets.top + theme.space.sm }]}>
+        <PressableScale
+          style={styles.back}
+          onPress={close}
+          accessibilityRole="button"
+          accessibilityLabel="뒤로 가기"
+          hitSlop={12}
+        >
+          <Text style={styles.backText}>‹ 뒤로</Text>
+        </PressableScale>
+      </View>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + theme.space.lg }]}>
         <Animated.View style={[styles.body, { opacity: content, transform: [{ translateY: contentY }] }]}>
-          <Text style={styles.cat}>{item.category}</Text>
+          <View style={styles.catBadge}>
+            <Text style={styles.catText}>{item.category}</Text>
+          </View>
           <Text style={styles.headline}>{item.headline}</Text>
-          <Text style={styles.meta}>
-            {item.sourceName}
-            {item.publishedAt ? ` · ${item.publishedAt}` : ''}
-          </Text>
-          <Text style={styles.summary}>{item.summary}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.source}>{item.sourceName}</Text>
+            {item.publishedAt ? <Text style={styles.metaDot}>·</Text> : null}
+            {item.publishedAt ? <Text style={styles.date}>{item.publishedAt}</Text> : null}
+          </View>
+
+          <View style={styles.summaryCard}>
+            <Text style={styles.summary}>{item.summary}</Text>
+          </View>
+
           <PressableScale
             style={[styles.link, checking && styles.linkDisabled]}
             onPress={viewSource}
@@ -108,13 +117,16 @@ export function DetailScreen({ item, onBack }: Props) {
             {checking ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.linkText}>원문 보기 ({item.sourceName})</Text>
+              <Text style={styles.linkText}>원문 보기 ↗</Text>
             )}
           </PressableScale>
-          <Text style={styles.disclaimer}>AI가 종합한 요약입니다. 정확한 내용은 원문을 확인하세요.</Text>
-          <Pressable onPress={reportItem} accessibilityRole="button" accessibilityLabel="요약 오류·문제 신고">
-            <Text style={styles.report}>요약 오류·문제 신고</Text>
-          </Pressable>
+
+          <View style={styles.footer}>
+            <Text style={styles.disclaimer}>AI가 종합한 요약입니다. 정확한 내용은 원문을 확인하세요.</Text>
+            <Pressable onPress={reportItem} accessibilityRole="button" accessibilityLabel="요약 오류·문제 신고" hitSlop={8}>
+              <Text style={styles.report}>요약 오류·문제 신고</Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </ScrollView>
     </Animated.View>
@@ -123,17 +135,58 @@ export function DetailScreen({ item, onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.color.bg },
-  back: { alignSelf: 'flex-start', paddingHorizontal: theme.space.md, paddingBottom: theme.space.sm },
-  backText: { color: theme.color.primary, fontSize: 16, fontWeight: '600' },
+  backRow: { paddingHorizontal: theme.space.md, paddingBottom: theme.space.sm, alignItems: 'flex-start' },
+  back: {
+    paddingVertical: theme.space.sm,
+    paddingHorizontal: theme.space.md,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.color.chipOff,
+    borderWidth: 1,
+    borderColor: theme.color.border,
+  },
+  backText: { color: theme.color.text, fontSize: 15, fontWeight: '700' },
   scroll: { padding: theme.space.lg },
-  body: { gap: theme.space.sm },
-  cat: { color: theme.color.primary, fontSize: 13, fontWeight: '700' },
-  headline: { fontSize: 22, fontWeight: '800', color: theme.color.text },
-  meta: { color: theme.color.sub, fontSize: 13 },
-  summary: { fontSize: 16, lineHeight: 24, color: theme.color.text, marginTop: theme.space.sm },
-  link: { backgroundColor: theme.color.primary, paddingVertical: theme.space.md, borderRadius: theme.radius.md, alignItems: 'center', justifyContent: 'center', minHeight: 52, marginTop: theme.space.md },
+  body: {},
+  catBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: theme.color.chipOff,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: theme.radius.lg,
+  },
+  catText: { color: theme.color.primary, fontSize: 12, fontWeight: '700' },
+  headline: { fontSize: 23, lineHeight: 33, fontWeight: '800', color: theme.color.text, marginTop: theme.space.md },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: theme.space.sm },
+  source: { color: theme.color.text, fontSize: 13, fontWeight: '600' },
+  metaDot: { color: theme.color.border, fontSize: 13 },
+  date: { color: theme.color.sub, fontSize: 13 },
+  summaryCard: {
+    backgroundColor: theme.color.surface,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    padding: theme.space.md,
+    marginTop: theme.space.lg,
+  },
+  summary: { fontSize: 16, lineHeight: 27, color: theme.color.text },
+  link: {
+    backgroundColor: theme.color.primary,
+    paddingVertical: theme.space.md,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    marginTop: theme.space.md,
+  },
   linkDisabled: { opacity: 0.6 },
   linkText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
-  disclaimer: { fontSize: 12, color: theme.color.sub, marginTop: theme.space.md },
-  report: { fontSize: 12, color: theme.color.sub, textDecorationLine: 'underline', marginTop: theme.space.sm },
+  footer: {
+    marginTop: theme.space.lg,
+    paddingTop: theme.space.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    gap: theme.space.sm,
+  },
+  disclaimer: { fontSize: 12, lineHeight: 18, color: theme.color.sub },
+  report: { fontSize: 12, color: theme.color.sub, textDecorationLine: 'underline' },
 });

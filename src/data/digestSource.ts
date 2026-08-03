@@ -112,9 +112,10 @@ export async function getFreshDigests(
   };
 }
 
-// 관심사별 다이제스트 조회 결과 제공
+// 관심사별 다이제스트 조회 결과 제공 — 관심사 1건 도착 시마다 onPartial로 누적 전달
 export async function getDigests(
   interests: string[],
+  onPartial?: (items: DigestItem[]) => void,
 ): Promise<DigestFetchResult> {
   if (interests.length === 0)
     return {
@@ -143,6 +144,8 @@ export async function getDigests(
   let anyStale = false;
   const generatedAtList: string[] = [];
 
+  const arrived: DigestItem[] = [];
+
   const perInterest = await Promise.all(
     interests.map(async (interest) => {
       try {
@@ -152,6 +155,9 @@ export async function getDigests(
         if (res.items.length > 0) {
           anyNetwork = true;
           generatedAtList.push(res.generatedAt);
+          // 도착 즉시 부분 노출 — 나머지 관심사 대기 없이 먼저 표시
+          arrived.push(...res.items);
+          onPartial?.(dedupe(arrived));
           return res.items;
         }
         return [];

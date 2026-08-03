@@ -46,7 +46,9 @@ export function useDigests(interests: string[]): DigestState {
     setLoading(true);
     setError(false);
     try {
-      const result = await getDigests(key ? key.split(",") : []);
+      const result = await getDigests(key ? key.split(",") : [], (partial) =>
+        setItems(onlyRecentlyPublished(partial)),
+      );
       // 캐시·예시 데이터는 대체 표시분이라 기간 제한 없이 노출
       const shownItems =
         result.source === "network"

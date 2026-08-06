@@ -52,9 +52,13 @@ function NewsCardBase({ item, index, onPress }: Props) {
           <Text style={styles.catText}>{item.category}</Text>
         </View>
         <Text style={styles.headline}>{item.headline}</Text>
-        <Text style={styles.summary} numberOfLines={3}>
-          {item.summary}
-        </Text>
+        {item.summary ? (
+          <Text style={styles.summary} numberOfLines={3}>
+            {item.summary}
+          </Text>
+        ) : (
+          <Text style={styles.noSummary}>요약 준비 중 · 원문에서 확인하세요</Text>
+        )}
         <View style={styles.metaRow}>
           <Text style={styles.source}>{item.sourceName}</Text>
           {item.publishedAt ? <Text style={styles.metaDot}>·</Text> : null}
@@ -87,6 +91,7 @@ const styles = StyleSheet.create({
   catText: { color: theme.color.primary, fontSize: 11, fontWeight: '700' },
   headline: { color: theme.color.text, fontSize: 17, lineHeight: 25, fontWeight: '700', marginTop: theme.space.sm },
   summary: { color: theme.color.sub, fontSize: 14, lineHeight: 22, marginTop: theme.space.xs },
+  noSummary: { color: theme.color.sub, fontSize: 13, fontStyle: 'italic', marginTop: theme.space.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: theme.space.sm },
   source: { color: theme.color.text, fontSize: 12, fontWeight: '600' },
   metaDot: { color: theme.color.border, fontSize: 12 },

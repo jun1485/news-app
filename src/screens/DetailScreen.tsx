@@ -103,7 +103,13 @@ export function DetailScreen({ item, onBack }: Props) {
           </View>
 
           <View style={styles.summaryCard}>
-            <Text style={styles.summary}>{item.summary}</Text>
+            {item.summary ? (
+              <Text style={styles.summary}>{item.summary}</Text>
+            ) : (
+              <Text style={styles.noSummary}>
+                이 기사는 AI 요약이 준비되지 않았습니다. 아래 원문에서 내용을 확인하세요.
+              </Text>
+            )}
           </View>
 
           <PressableScale
@@ -169,6 +175,7 @@ const styles = StyleSheet.create({
     marginTop: theme.space.lg,
   },
   summary: { fontSize: 16, lineHeight: 27, color: theme.color.text },
+  noSummary: { fontSize: 15, lineHeight: 24, color: theme.color.sub, fontStyle: 'italic' },
   link: {
     backgroundColor: theme.color.primary,
     paddingVertical: theme.space.md,

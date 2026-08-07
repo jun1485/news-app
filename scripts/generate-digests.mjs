@@ -9,15 +9,20 @@ const MAX_ITEMS = 6;
 const CATEGORY_TTL = 93600;
 const POOL_LIMIT = 40;
 const INDEX_KEY = "idx:v1";
+const EXTRA_POOL_KEY = "pool:v1:extra";
+const EXTRA_POOL_ITEMS = 30;
+const EXTRA_BATCH = 12;
 
 const RSS_SOURCES = {
   "정치": [{ u: "https://www.yna.co.kr/rss/politics.xml", n: "연합뉴스" }],
   "경제": [
     { u: "https://www.yna.co.kr/rss/economy.xml", n: "연합뉴스" },
     { u: "https://www.yna.co.kr/rss/industry.xml", n: "연합뉴스" },
+    { u: "https://www.hankyung.com/feed/it", n: "한국경제" },
   ],
   "IT/과학": [
-    { u: "https://rss.etnews.com/Section901.xml", n: "전자신문" },
+    { u: "https://feeds.feedburner.com/zdkorea", n: "ZDNet Korea" },
+    { u: "https://www.hankyung.com/feed/it", n: "한국경제" },
     { u: "https://www.yna.co.kr/rss/industry.xml", n: "연합뉴스" },
   ],
   "사회": [{ u: "https://www.yna.co.kr/rss/society.xml", n: "연합뉴스" }],
@@ -28,6 +33,16 @@ const RSS_SOURCES = {
   ],
   "스포츠": [{ u: "https://www.yna.co.kr/rss/sports.xml", n: "연합뉴스" }],
 };
+
+// 한국어 제목·요약을 생성할 해외 소스
+const FOREIGN_SOURCES = [
+  { u: "https://techcrunch.com/feed/", n: "TechCrunch" },
+  { u: "http://feeds.arstechnica.com/arstechnica/index", n: "Ars Technica" },
+  { u: "https://www.theverge.com/rss/index.xml", n: "The Verge" },
+];
+
+// 키워드 검색 인덱스에만 담는 소스 — 요약 대상 아님
+const INDEX_ONLY_SOURCES = [{ u: "https://rss.mt.co.kr/mt_news.xml", n: "머니투데이" }];
 
 const SUMMARY_SCHEMA = {
   type: "ARRAY",
@@ -64,25 +79,30 @@ function rssText(raw) {
     .trim();
 }
 
-// RSS XML에서 기사 목록 추출
+// RSS·Atom 피드에서 기사 목록 추출
 function parseRss(xml, sourceName) {
   const out = [];
-  const re = /<item>([\s\S]*?)<\/item>/g;
+  const re = /<(item|entry)[\s>]([\s\S]*?)<\/\1>/g;
   let m;
   while ((m = re.exec(xml)) !== null) {
-    const block = m[1];
+    const block = m[2];
     const pick = (tag) => {
       const mm = new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">").exec(block);
       return mm ? rssText(mm[1]) : "";
     };
     const title = pick("title");
-    const link = pick("link");
+    // Atom은 link를 href 속성으로 제공
+    let link = pick("link");
+    if (!/^https?:\/\//.test(link)) {
+      const href = /<link[^>]*href="([^"]+)"/.exec(block);
+      link = href ? href[1] : "";
+    }
     if (!title || !/^https?:\/\//.test(link)) continue;
-    const t = Date.parse(pick("pubDate"));
+    const t = Date.parse(pick("pubDate") || pick("published") || pick("updated") || pick("dc:date"));
     out.push({
       title,
       link,
-      description: pick("description").slice(0, 500),
+      description: (pick("description") || pick("summary") || pick("content")).slice(0, 500),
       publishedAt: Number.isFinite(t) ? new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10) : null,
       sourceName,
     });
@@ -119,16 +139,20 @@ async function collectToday(category, today) {
 }
 
 // 요약 프롬프트 구성
-function buildPrompt(articles, category) {
+function buildPrompt(articles, category, wantItems) {
   const list = articles.map((a, i) => `[${i}] ${a.title}\n${a.description}`).join("\n\n");
   return [
-    `아래는 오늘 국내 언론에 게시된 '${category}' 분야 기사 목록이다.`,
-    `이 중 가장 중요하고 서로 주제가 겹치지 않는 ${MAX_ITEMS}건을 골라 한국어로 정리해줘.`,
+    `아래는 오늘 게시된 '${category}' 기사 목록이다. 영문 기사가 섞여 있을 수 있다.`,
+    `이 중 가장 중요하고 서로 주제가 겹치지 않는 ${wantItems}건을 골라 한국어로 정리해줘.`,
     ``,
     `각 항목 규칙:`,
     `- index: 위 목록의 번호를 그대로.`,
-    `- headline: 원문 제목 복사 대신 핵심 요지를 담아 새로 작성한 한국어 제목.`,
-    `- summary: 한국어 3~5문장(250~400자) 요약. 핵심 사실, 구체 수치와 비교 기준, 배경 맥락, 파급 효과나 향후 일정 순으로 담아라. 원문 문장 복붙 금지, 직접 인용 금지, 반드시 자기 문장으로 재구성.`,
+    `- headline: 반드시 한국어 제목. 영문 기사는 한국어로 번역해 작성하고, 원문 제목 복사 대신 핵심 요지를 담아 새로 써라.`,
+    `- summary: 반드시 한국어. **2문단 이상**으로 쓰고 문단은 빈 줄(\\n\\n)로 구분해라.`,
+    `    · 1문단: 핵심 사실과 구체 수치(비교 기준 포함).`,
+    `    · 2문단: 배경 맥락과 파급 효과, 향후 일정.`,
+    `    · 각 문단 맨 앞에 내용에 어울리는 이모지 1개를 붙여라(📈 💰 🏛️ ⚖️ 🤖 🔬 ⚽ 🎬 🌍 등에서 적절히 선택).`,
+    `    · 문단당 2~3문장, 전체 400~600자. 원문 문장 복붙 금지, 직접 인용 금지, 자기 문장으로 재구성.`,
     `- 목록에 없는 내용을 지어내지 마라.`,
     `JSON 배열만 출력.`,
     ``,
@@ -137,9 +161,9 @@ function buildPrompt(articles, category) {
 }
 
 // Gemini 요약 생성 — 메타데이터는 RSS 원본 유지
-async function summarize(apiKey, articles, category) {
+async function summarize(apiKey, articles, category, wantItems = MAX_ITEMS) {
   const pool = articles.slice(0, POOL_LIMIT);
-  const prompt = buildPrompt(pool, category);
+  const prompt = buildPrompt(pool, category, wantItems);
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     let res;
     try {
@@ -151,7 +175,7 @@ async function summarize(apiKey, articles, category) {
           signal: AbortSignal.timeout(60000),
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json", responseSchema: SUMMARY_SCHEMA },
+            generationConfig: { responseMimeType: "application/json", responseSchema: SUMMARY_SCHEMA, maxOutputTokens: 32768 },
           }),
         },
       );
@@ -189,7 +213,7 @@ async function summarize(apiKey, articles, category) {
         sourceUrl: src.link,
         publishedAt: src.publishedAt,
       });
-      if (items.length >= MAX_ITEMS) break;
+      if (items.length >= wantItems) break;
     }
     if (items.length > 0) return items;
   }
@@ -296,6 +320,40 @@ async function main() {
     await putCategory(token, category, items);
     const avg = Math.round(items.reduce((s, i) => s + i.summary.length, 0) / items.length);
     console.log(`${category}: 수집 ${articles.length}건 → 적재 ${items.length}건 (평균 요약 ${avg}자)`);
+  }
+  // 인덱스 전용 소스 — 검색 범위만 확대
+  const idxGroups = await Promise.all(INDEX_ONLY_SOURCES.map(fetchSource));
+  const idxOnly = idxGroups.flat().filter((a) => a.publishedAt === today);
+  if (idxOnly.length > 0) {
+    indexPool.push(...idxOnly.map((a) => ({ ...a, category: "국내" })));
+    console.log(`인덱스 전용 소스: 오늘 ${idxOnly.length}건 추가`);
+  }
+  // 해외 소스 — 인덱스 적재 + 한국어 제목·요약 생성
+  const extraGroups = await Promise.all(FOREIGN_SOURCES.map(fetchSource));
+  const extra = extraGroups.flat().filter((a) => a.publishedAt === today);
+  if (extra.length > 0) {
+    indexPool.push(...extra.map((a) => ({ ...a, category: "해외·IT" })));
+    console.log(`해외 소스: 오늘 ${extra.length}건 추가`);
+    // 배치로 나눠 요약해 응답 잘림 없이 커버리지 확대
+    const extraItems = [];
+    for (let i = 0; i < extra.length && extraItems.length < EXTRA_POOL_ITEMS; i += EXTRA_BATCH) {
+      const slice = extra.slice(i, i + EXTRA_BATCH);
+      const want = Math.min(EXTRA_BATCH, EXTRA_POOL_ITEMS - extraItems.length);
+      const part = await summarize(apiKey, slice, "해외·IT", want);
+      extraItems.push(...part);
+      if (part.length === 0) break;
+    }
+    if (extraItems.length > 0) {
+      const value = JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        items: extraItems.map((it, i) => ({ ...it, id: `ext-${i}`, category: "해외·IT" })),
+      });
+      await putKvValue(token, EXTRA_POOL_KEY, value, CATEGORY_TTL);
+      const avg = Math.round(extraItems.reduce((sum, i) => sum + i.summary.length, 0) / extraItems.length);
+      console.log(`해외·IT 요약 풀: ${extraItems.length}건 적재 (평균 요약 ${avg}자)`);
+    } else {
+      console.error("해외·IT 요약 실패");
+    }
   }
   if (indexPool.length > 0) {
     const { total, carried } = await putIndex(token, indexPool, today);

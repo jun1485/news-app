@@ -2,8 +2,9 @@
   "latestVersion": "1.0.2",
   "storeUrl": "https://play.google.com/store/apps/details?id=jj.koreannews",
   "highlights": [
-    "원문 링크 확인 기능 추가",
-    "뉴스 목록 안내 문구 개선",
-    "앱 아이콘 교체"
+    "오늘 게시된 뉴스만 표시",
+    "불러온 뉴스 먼저 표시",
+    "목록·상세 화면 정리",
+    "로딩 화면 애니메이션 추가"
   ]
 }

@@ -9,6 +9,7 @@ const MAX_ITEMS = 6;
 const CATEGORY_TTL = 93600;
 const POOL_LIMIT = 40;
 const INDEX_KEY = "idx:v1";
+const KEYWORD_CACHE_PREFIX = "kw:v1:";
 const EXTRA_POOL_KEY = "pool:v1:extra";
 const EXTRA_POOL_ITEMS = 30;
 const EXTRA_BATCH = 12;
@@ -252,6 +253,32 @@ async function getKvValue(token, key) {
   }
 }
 
+// 키워드 검색 결과 캐시 삭제
+async function deleteKeywordCaches(token) {
+  const keys = [];
+  let cursor = "";
+  do {
+    const params = new URLSearchParams({ prefix: KEYWORD_CACHE_PREFIX, limit: "1000" });
+    if (cursor) params.set("cursor", cursor);
+    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/keys?${params}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json();
+    if (!json.success) throw new Error(`KV 키 목록 조회 실패: ${JSON.stringify(json.errors)}`);
+    keys.push(...json.result.map((item) => item.name));
+    cursor = json.result_info?.cursor ?? "";
+  } while (cursor);
+  if (keys.length === 0) return 0;
+  const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/bulk`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(keys),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(`KV 키워드 캐시 삭제 실패: ${JSON.stringify(json.errors)}`);
+  return keys.length;
+}
+
 // 키워드 검색용 전체 기사 인덱스 적재
 async function putIndex(token, articles, today) {
   const seen = new Set();
@@ -359,6 +386,8 @@ async function main() {
   if (indexPool.length > 0) {
     const { total, carried } = await putIndex(token, indexPool, today);
     console.log(`키워드 인덱스: ${total}건 적재 (이전 실행분 유지 ${carried}건)`);
+    const deleted = await deleteKeywordCaches(token);
+    console.log(`키워드 캐시: ${deleted}건 삭제`);
   }
   if (failed > 0) {
     console.error(`실패 ${failed}건`);

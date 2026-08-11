@@ -39,14 +39,14 @@ export function useDigests(interests: string[]): DigestState {
   const [freshCapped, setFreshCapped] = useState(false);
   const [freshFailed, setFreshFailed] = useState(false);
 
-  const key = interests.join(",");
+  const key = interests.join("\u0000");
 
   // 현재 관심사 다이제스트 갱신
   const reload = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const result = await getDigests(key ? key.split(",") : [], (partial) =>
+      const result = await getDigests(key ? key.split("\u0000") : [], (partial) =>
         setItems(onlyRecentlyPublished(partial)),
       );
       // 캐시·예시 데이터는 대체 표시분이라 기간 제한 없이 노출
@@ -75,7 +75,7 @@ export function useDigests(interests: string[]): DigestState {
     setFreshCapped(false);
     setFreshFailed(false);
     try {
-      const result = await getFreshDigests(key ? key.split(",") : []);
+      const result = await getFreshDigests(key ? key.split("\u0000") : []);
       const recentItems = onlyRecentlyPublished(result.items);
       if (result.source === "network" && recentItems.length > 0 && !result.stale) {
         setItems(recentItems);

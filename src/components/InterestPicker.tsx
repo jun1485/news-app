@@ -24,11 +24,18 @@ export function InterestPicker({ initial, submitLabel, onSubmit }: Props) {
     );
   };
 
-  // 직접 입력 키워드 추가 — 공백 정규화·1~20자 제한·중복 방지
+  // 직접 입력 키워드 추가
   const addKeyword = () => {
-    const trimmed = keyword.trim().replace(/\s+/g, ' ');
-    if (trimmed.length < 1 || trimmed.length > 20) return;
-    setSelected((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    const keywords = [
+      ...new Set(
+        keyword
+          .split(',')
+          .map((value) => value.trim().replace(/\s+/g, ' '))
+          .filter((value) => value.length >= 1 && value.length <= 20),
+      ),
+    ];
+    if (keywords.length === 0) return;
+    setSelected((prev) => [...prev, ...keywords.filter((value) => !prev.includes(value))]);
     setKeyword('');
   };
 

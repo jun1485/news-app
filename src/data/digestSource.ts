@@ -9,6 +9,7 @@ import { isValidArticleUrl } from "../util/urlCheck";
 
 const PRESETS: readonly string[] = PRESET_CATEGORIES;
 const CACHE_PREFIX = "digest_cache_v2:";
+const KEYWORD_RESULT_LIMIT = 6;
 
 // Worker 응답 형태
 interface DigestResponse {
@@ -42,6 +43,18 @@ export interface DigestFetchResult {
   generatedAt: string | null;
 }
 
+// 직접 입력 키워드 검색어 정규화
+function normalizeKeywords(interests: string[]): string[] {
+  return [
+    ...new Set(
+      interests
+        .filter((interest) => !PRESETS.includes(interest))
+        .flatMap((interest) => interest.split(",").map((keyword) => keyword.trim()))
+        .filter(Boolean),
+    ),
+  ];
+}
+
 // 다른 뉴스 조회 결과 제공
 export async function getFreshDigests(
   interests: string[],
@@ -65,6 +78,7 @@ export async function getFreshDigests(
       generatedAt: null,
     };
   const deviceId = await getDeviceId().catch(() => "anon");
+  const headlineKeywords = normalizeKeywords(interests);
   let anyCapped = false;
   let anyFailed = false;
   let anyStale = false;
@@ -72,7 +86,7 @@ export async function getFreshDigests(
   const perInterest = await Promise.all(
     interests.map(async (interest) => {
       try {
-        const res = await fetchInterest(interest, deviceId, true);
+        const res = await fetchInterest(interest, deviceId, true, headlineKeywords);
         if (res.capped) anyCapped = true;
         if (res.stale) anyStale = true;
         generatedAtList.push(res.generatedAt);
@@ -138,6 +152,7 @@ export async function getDigests(
     };
 
   const deviceId = await getDeviceId().catch(() => "anon");
+  const headlineKeywords = normalizeKeywords(interests);
   let anyNetwork = false;
   let anyCapped = false;
   let anyFailed = false;
@@ -149,7 +164,7 @@ export async function getDigests(
   const perInterest = await Promise.all(
     interests.map(async (interest) => {
       try {
-        const res = await fetchInterest(interest, deviceId);
+        const res = await fetchInterest(interest, deviceId, false, headlineKeywords);
         if (res.capped) anyCapped = true;
         if (res.stale) anyStale = true;
         if (res.items.length > 0) {
@@ -216,15 +231,41 @@ async function fetchInterest(
   interest: string,
   deviceId: string,
   fresh = false,
+  headlineKeywords: string[] = [],
 ): Promise<DigestResponse> {
-  const param = PRESETS.includes(interest)
+  const preset = PRESETS.includes(interest);
+  const param = preset
     ? `category=${encodeURIComponent(interest)}`
     : `kw=${encodeURIComponent(interest)}`;
   const url = `${WORKER_URL}/digest?${param}${fresh ? "&fresh=1" : ""}`;
   const res = await fetch(url, { headers: { "x-device-id": deviceId } });
   if (!res.ok) throw new Error(`digest fetch failed: ${res.status}`);
   const data = (await res.json()) as DigestResponse;
-  return { ...data, items: withValidLinks(data.items) };
+  let items = withValidLinks(data.items);
+  let capped = data.capped;
+  let stale = data.stale;
+  if (!preset && items.length < KEYWORD_RESULT_LIMIT) {
+    const supplementalInterest =
+      headlineKeywords.length > 1 ? headlineKeywords.join(", ") : `${interest}, ${interest}`;
+    const supplementalParam = `kw=${encodeURIComponent(supplementalInterest)}`;
+    const supplementalUrl = `${WORKER_URL}/digest?${supplementalParam}${fresh ? "&fresh=1" : ""}`;
+    const supplementalRes = await fetch(supplementalUrl, {
+      headers: { "x-device-id": deviceId },
+    }).catch(() => null);
+    if (supplementalRes?.ok) {
+      const supplemental = (await supplementalRes.json()) as DigestResponse;
+      items = dedupe([...items, ...withValidLinks(supplemental.items)]);
+      capped = capped || supplemental.capped;
+      stale = stale || supplemental.stale;
+    }
+  }
+  if (!preset && headlineKeywords.length > 0) {
+    const loweredKeywords = headlineKeywords.map((keyword) => keyword.toLocaleLowerCase());
+    items = items.filter((item) =>
+      loweredKeywords.some((keyword) => item.headline.toLocaleLowerCase().includes(keyword)),
+    );
+  }
+  return { ...data, items, capped, stale };
 }
 
 // 원문 링크 형식이 유효한 항목만 통과 — 잘못된 주소 카드 노출 차단

@@ -11,7 +11,6 @@ const POOL_LIMIT = 40;
 const INDEX_KEY = "idx:v1";
 const KEYWORD_CACHE_PREFIX = "kw:v1:";
 const EXTRA_POOL_KEY = "pool:v1:extra";
-const EXTRA_POOL_ITEMS = 30;
 const EXTRA_BATCH = 12;
 
 const RSS_SOURCES = {
@@ -221,6 +220,23 @@ async function summarize(apiKey, articles, category, wantItems = MAX_ITEMS) {
   return [];
 }
 
+// 전체 기사 한국어 제목·요약 생성
+async function summarizeAll(apiKey, articles, category) {
+  const items = [];
+  for (let i = 0; i < articles.length; i += EXTRA_BATCH) {
+    const slice = articles.slice(i, i + EXTRA_BATCH);
+    const batchItems = await summarize(apiKey, slice, category, slice.length);
+    const summarizedUrls = new Set(batchItems.map((item) => item.sourceUrl));
+    items.push(...batchItems);
+    for (const article of slice) {
+      if (summarizedUrls.has(article.link)) continue;
+      const [item] = await summarize(apiKey, [article], category, 1);
+      if (item) items.push(item);
+    }
+  }
+  return items;
+}
+
 // KV 값 적재
 async function putKvValue(token, key, value, ttl) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/values/${encodeURIComponent(key)}?expiration_ttl=${ttl}`;
@@ -295,7 +311,7 @@ async function putIndex(token, articles, today) {
       publishedAt: a.publishedAt,
       category: a.category,
       // 키워드 매칭 전용 본문 발췌 — 화면 표시 미사용
-      q: (a.summary ?? a.description).slice(0, 220),
+      q: (a.q ?? a.summary ?? a.description).slice(0, 220),
     });
   }
   // 앞선 실행분 중 당일 기사를 유지해 RSS에서 밀려난 기사도 검색 가능하게 누적
@@ -358,30 +374,30 @@ async function main() {
   }
   // 해외 소스 — 인덱스 적재 + 한국어 제목·요약 생성
   const extraGroups = await Promise.all(FOREIGN_SOURCES.map(fetchSource));
-  const extra = extraGroups.flat().filter((a) => a.publishedAt === today);
+  const seenExtra = new Set();
+  const extra = extraGroups
+    .flat()
+    .filter((a) => a.publishedAt === today)
+    .filter((a) => (seenExtra.has(a.link) ? false : (seenExtra.add(a.link), true)));
   if (extra.length > 0) {
     console.log(`해외 소스: 오늘 ${extra.length}건 추가`);
-    // 배치로 나눠 요약해 응답 잘림 없이 커버리지 확대
-    const extraItems = [];
-    for (let i = 0; i < extra.length && extraItems.length < EXTRA_POOL_ITEMS; i += EXTRA_BATCH) {
-      const slice = extra.slice(i, i + EXTRA_BATCH);
-      const want = Math.min(EXTRA_BATCH, EXTRA_POOL_ITEMS - extraItems.length);
-      const part = await summarize(apiKey, slice, "해외·IT", want);
-      extraItems.push(...part);
-      if (part.length === 0) break;
-    }
-    if (extraItems.length > 0) {
-      indexPool.push(...extraItems.map((item) => ({ ...item, category: "해외·IT" })));
-      const value = JSON.stringify({
-        generatedAt: new Date().toISOString(),
-        items: extraItems.map((it, i) => ({ ...it, id: `ext-${i}`, category: "해외·IT" })),
-      });
-      await putKvValue(token, EXTRA_POOL_KEY, value, CATEGORY_TTL);
-      const avg = Math.round(extraItems.reduce((sum, i) => sum + i.summary.length, 0) / extraItems.length);
-      console.log(`해외·IT 요약 풀: ${extraItems.length}건 적재 (평균 요약 ${avg}자)`);
-    } else {
-      console.error("해외·IT 요약 실패");
-    }
+    const extraItems = await summarizeAll(apiKey, extra, "해외·IT");
+    if (extraItems.length !== extra.length)
+      throw new Error(`해외·IT 한국어 생성 누락: ${extraItems.length}/${extra.length}건`);
+    const extraByUrl = new Map(extra.map((article) => [article.link, article]));
+    indexPool.push(
+      ...extraItems.map((item) => {
+        const original = extraByUrl.get(item.sourceUrl);
+        return { ...item, category: "해외·IT", q: `${original.title} ${original.description}` };
+      }),
+    );
+    const value = JSON.stringify({
+      generatedAt: new Date().toISOString(),
+      items: extraItems.map((it, i) => ({ ...it, id: `ext-${i}`, category: "해외·IT" })),
+    });
+    await putKvValue(token, EXTRA_POOL_KEY, value, CATEGORY_TTL);
+    const avg = Math.round(extraItems.reduce((sum, i) => sum + i.summary.length, 0) / extraItems.length);
+    console.log(`해외·IT 요약 풀: ${extraItems.length}건 적재 (평균 요약 ${avg}자)`);
   }
   if (indexPool.length > 0) {
     const { total, carried } = await putIndex(token, indexPool, today);

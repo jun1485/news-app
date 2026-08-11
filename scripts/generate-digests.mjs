@@ -204,7 +204,7 @@ async function summarize(apiKey, articles, category, wantItems = MAX_ITEMS) {
       if (!src || used.has(idx)) continue;
       const headline = String(row.headline ?? "").trim();
       const summary = String(row.summary ?? "").trim();
-      if (!headline || !summary) continue;
+      if (!/[가-힣]/.test(headline) || !/[가-힣]/.test(summary)) continue;
       used.add(idx);
       items.push({
         headline,
@@ -252,22 +252,23 @@ async function getKvValue(token, key) {
   }
 }
 
-// 키워드 검색용 전체 기사 인덱스 적재 — 당일분 누적, 요약 없이 제목·출처만
+// 키워드 검색용 전체 기사 인덱스 적재
 async function putIndex(token, articles, today) {
   const seen = new Set();
   const items = [];
   for (const a of articles) {
-    if (seen.has(a.link)) continue;
-    seen.add(a.link);
+    const sourceUrl = a.sourceUrl ?? a.link;
+    if (seen.has(sourceUrl)) continue;
+    seen.add(sourceUrl);
     items.push({
-      headline: a.title,
-      summary: "",
+      headline: a.headline ?? a.title,
+      summary: a.summary ?? "",
       sourceName: a.sourceName,
-      sourceUrl: a.link,
+      sourceUrl,
       publishedAt: a.publishedAt,
       category: a.category,
       // 키워드 매칭 전용 본문 발췌 — 화면 표시 미사용
-      q: a.description.slice(0, 220),
+      q: (a.summary ?? a.description).slice(0, 220),
     });
   }
   // 앞선 실행분 중 당일 기사를 유지해 RSS에서 밀려난 기사도 검색 가능하게 누적
@@ -332,7 +333,6 @@ async function main() {
   const extraGroups = await Promise.all(FOREIGN_SOURCES.map(fetchSource));
   const extra = extraGroups.flat().filter((a) => a.publishedAt === today);
   if (extra.length > 0) {
-    indexPool.push(...extra.map((a) => ({ ...a, category: "해외·IT" })));
     console.log(`해외 소스: 오늘 ${extra.length}건 추가`);
     // 배치로 나눠 요약해 응답 잘림 없이 커버리지 확대
     const extraItems = [];
@@ -344,6 +344,7 @@ async function main() {
       if (part.length === 0) break;
     }
     if (extraItems.length > 0) {
+      indexPool.push(...extraItems.map((item) => ({ ...item, category: "해외·IT" })));
       const value = JSON.stringify({
         generatedAt: new Date().toISOString(),
         items: extraItems.map((it, i) => ({ ...it, id: `ext-${i}`, category: "해외·IT" })),

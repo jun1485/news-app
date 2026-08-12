@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   View,
@@ -66,7 +67,7 @@ export function FeedScreen({ interests, onSelect }: Props) {
       data={items}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      refreshing={loading}
+      refreshing={false}
       onRefresh={reload}
       contentContainerStyle={[
         styles.list,
@@ -74,6 +75,18 @@ export function FeedScreen({ interests, onSelect }: Props) {
       ]}
       ListHeaderComponent={
         <View style={styles.header}>
+          {refreshing && (
+            <Modal transparent statusBarTranslucent animationType="fade">
+              <View
+                style={styles.loadingOverlay}
+                accessibilityLiveRegion="polite"
+                accessibilityRole="progressbar"
+                accessibilityLabel="최신 뉴스 불러오는 중"
+              >
+                <LoadingMascot label="최신 뉴스를 불러오는 중..." />
+              </View>
+            </Modal>
+          )}
           <Text style={styles.title}>오늘의 뉴스</Text>
           <Text style={styles.disclaimer}>
             AI가 종합한 요약입니다. 정확한 내용은 원문을 확인하세요.
@@ -84,18 +97,7 @@ export function FeedScreen({ interests, onSelect }: Props) {
           {outdatedHidden && items.length > 0 && (
             <Text style={styles.meta}>오늘 게시된 뉴스만 표시합니다.</Text>
           )}
-          {/* 재조회 중 안내 문구 대신 진행 상태 표시 */}
-          {refreshing ? (
-            <View
-              style={styles.progressRow}
-              accessibilityLiveRegion="polite"
-              accessibilityRole="progressbar"
-              accessibilityLabel="최신 뉴스 불러오는 중"
-            >
-              <ActivityIndicator size="small" color={theme.color.primary} />
-              <Text style={styles.meta}>최신 뉴스를 불러오는 중...</Text>
-            </View>
-          ) : (
+          {refreshing ? null : (
             <>
               {source === "static" && (
                 <Text style={styles.notice}>
@@ -270,4 +272,10 @@ const styles = StyleSheet.create({
   },
   moreBtnDisabled: { opacity: 0.5 },
   moreText: { color: theme.color.chipOffText, fontWeight: "700" },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+  },
 });

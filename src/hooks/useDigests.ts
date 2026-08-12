@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DigestItem } from "../types";
 import { getDigests, getFreshDigests } from "../data/digestSource";
 import type { DigestSource } from "../data/digestSource";
@@ -40,21 +40,38 @@ export function useDigests(interests: string[]): DigestState {
   const [freshFailed, setFreshFailed] = useState(false);
 
   const key = interests.join("\u0000");
+  const loadedKey = useRef("");
 
   // 현재 관심사 다이제스트 갱신
   const reload = useCallback(async () => {
+    const preserveItems = loadedKey.current === key;
     setLoading(true);
     setError(false);
     try {
-      const result = await getDigests(key ? key.split("\u0000") : [], (partial) =>
-        setItems(onlyRecentlyPublished(partial)),
+      const result = await getDigests(
+        key ? key.split("\u0000") : [],
+        (partial) =>
+          setItems((current) =>
+            preserveItems && current.length > 0
+              ? current
+              : onlyRecentlyPublished(partial),
+          ),
       );
       // 캐시·예시 데이터는 대체 표시분이라 기간 제한 없이 노출
       const shownItems =
         result.source === "network"
           ? onlyRecentlyPublished(result.items)
           : result.items;
-      setItems(shownItems);
+      setItems((current) =>
+        preserveItems &&
+        current.length === shownItems.length &&
+        current.every(
+          (item, index) => item.sourceUrl === shownItems[index]?.sourceUrl,
+        )
+          ? current
+          : shownItems,
+      );
+      loadedKey.current = key;
       setOutdatedHidden(shownItems.length < result.items.length);
       setCapped(result.capped);
       setSource(result.source);
@@ -77,7 +94,11 @@ export function useDigests(interests: string[]): DigestState {
     try {
       const result = await getFreshDigests(key ? key.split("\u0000") : []);
       const recentItems = onlyRecentlyPublished(result.items);
-      if (result.source === "network" && recentItems.length > 0 && !result.stale) {
+      if (
+        result.source === "network" &&
+        recentItems.length > 0 &&
+        !result.stale
+      ) {
         setItems(recentItems);
         setOutdatedHidden(recentItems.length < result.items.length);
         setCapped(result.capped);

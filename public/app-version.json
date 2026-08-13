@@ -1,10 +1,10 @@
 {
-  "latestVersion": "1.0.2",
+  "latestVersion": "1.0.4",
   "storeUrl": "https://play.google.com/store/apps/details?id=jj.koreannews",
   "highlights": [
-    "오늘 게시된 뉴스만 표시",
-    "불러온 뉴스 먼저 표시",
-    "목록·상세 화면 정리",
-    "로딩 화면 애니메이션 추가"
+    "키워드 검색 결과 보강",
+    "쉼표로 여러 키워드 추가",
+    "해외 뉴스 한국어 제목·요약 제공",
+    "새로고침 화면 안정화"
   ]
 }
